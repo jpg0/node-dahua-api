@@ -191,17 +191,21 @@ dahua.prototype.ptzPreset = function (preset) {
   }).auth(this.camUser,this.camPass,false);
 };
 
-dahua.prototype.ptzZoom = function (multiple) {
+dahua.prototype.ptzZoom = function (action,arg2) {
   var self = this;
-  if (isNaN(multiple)) {
+   // Check the action & arg2 values to ensure they are safe
+  if (['start','stop'].indexOf(action) == -1) {
+    action = stop;
+  }
+  if (isNaN(arg2)) {
     self.emit("error",'INVALID PTZ ZOOM');
     return 0;
   } 
-  if (multiple > 0) cmd = 'ZoomTele';
-  if (multiple < 0) cmd = 'ZoomWide';
-  if (multiple === 0) return 0;
+  if (arg2 > 0) cmd = 'ZoomTele';
+  if (arg2 < 0) cmd = 'ZoomWide';
+  if (arg2 === 0) return 0;
 
-  request(this.baseUri + '/cgi-bin/ptz.cgi?action=start&channel=0&code=' + cmd + '&arg1=0&arg2=' + multiple + '&arg3=0', function (error, response, body) {
+  request(this.baseUri + '/cgi-bin/ptz.cgi?action=' + action + '&channel=0&code=' + cmd + '&arg1=0&arg2=1&arg3=0', function (error, response, body) {
     if ((error) || (response.statusCode !== 200) || (body.trim() !== "OK")) {
       self.emit("error", 'FAILED TO ISSUE PTZ ZOOM');
     }
@@ -231,11 +235,17 @@ dahua.prototype.ptzMove = function (direction,action,verticalSpeed,horizontalSpe
   var directionAry = ["Up", "Down", "Left", "Right", "ZoomWide", "ZoomTele", "FocusNear", "FocusFar", "IrisLarge", "IrisSmall", "GotoPreset", "StartTour", "LeftUp", "RightUp", "LeftDown", "RightDown", "AutoPanOn", "AutoPanOff", "AutoScanOn", "AutoScanOff", "StartPattern", "StopPattern", "Position",  "PositionABS", "PositionReset", "UpTele", "DownTele", "LeftTele", "RightTele", "LeftUpTele", "LeftDownTele", "RightUpTele", "RightDownTele", "UpWide", "DownWide", "LeftWide", "RightWide", "LeftUpWide", "LeftDownWide", "RightUpWide", "RightDownWide", "Continuously", "Relatively"]
   var verticalSpeed = parseInt(verticalSpeed);
   var horizontalSpeed = parseInt(horizontalSpeed);
+  var speed = 4;
   if (!isNaN(verticalSpeed) && isNaN(horizontalSpeed)) horizontalSpeed = verticalSpeed
+  if (verticalSpeed > 0) speed = verticalSpeed;
 
   if (TRACE) console.log('ptzMove: direction,action,verticalSpeed,horizontalSpeed ',direction,action,verticalSpeed,horizontalSpeed);
-  if (isNaN(speed)) {
-    self.emit("error",'INVALID PTZ SPEED');
+  if (isNaN(verticalSpeed)) {
+    self.emit("error",'INVALID PTZ VERTICAL SPEED');
+    return 0;
+  }
+  if (isNaN(horizontalSpeed)) {
+    self.emit("error",'INVALID PTZ HORIZONTAL SPEED');
     return 0;
   }
   if (actionAry.indexOf(action) == -1) {
@@ -246,7 +256,7 @@ dahua.prototype.ptzMove = function (direction,action,verticalSpeed,horizontalSpe
     self.emit("error",'INVALID PTZ DIRECTION');
     return 0;
   }
-  request(this.baseUri + '/cgi-bin/ptz.cgi?action=' + action + '&channel=0&code=' + direction + '&arg1=' + speed +'&arg2=' + speed + '&arg3=0', function (error, response, body) {
+  request(this.baseUri + '/cgi-bin/ptz.cgi?action=' + action + '&channel=0&code=' + direction + '&arg1=' + verticalSpeed +'&arg2=' + horizontalSpeed + '&arg3=0', function (error, response, body) {
     if ((error) || (response.statusCode !== 200) || (body.trim() !== "OK")) {
       self.emit("error", 'FAILED TO ISSUE PTZ UP COMMAND');
     }
