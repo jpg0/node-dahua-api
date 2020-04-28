@@ -9,22 +9,11 @@ var setKeypath = require('keypather/set');
 var fs = require('fs');
 var path = require('path');
 var moment = require('moment');
-const winston = require('winston');
+const debug = require('debug')('http')
 
 class DahuaCam extends events.EventEmitter {
   constructor(options) {
     super();
-    
-    this.logger = winston.createLogger({
-      level: options.logLevel || 'info',
-      format: winston.format.combine(
-          winston.format.splat(),
-          winston.format.simple()
-      ),
-      transports: [
-          new winston.transports.Console()
-      ]
-    });
     
     this.baseUri = `http://${options.host}:${options.port}`;
     this.camUser = options.user;
@@ -56,7 +45,7 @@ class DahuaCam extends events.EventEmitter {
     if ( options.active ) { this.client = this.connect(options) };
 
     this.on('error',function(err){
-      this.logger.error("Error: " + err);
+      debug("Error: " + err);
     });
 
   };
@@ -75,10 +64,10 @@ class DahuaCam extends events.EventEmitter {
       client.on('socket', (socket) => {
         // Set keep-alive probes - throws ESOCKETTIMEDOUT error after ~16min if connection broken
         NetKeepAlive.setKeepAliveInterval(socket, 1000);
-        this.logger.debug('TCP_KEEPINTVL:',NetKeepAlive.getKeepAliveInterval(socket)); 
+        debug('TCP_KEEPINTVL:',NetKeepAlive.getKeepAliveInterval(socket)); 
         
         NetKeepAlive.setKeepAliveProbes(socket, 1);
-        this.logger.debug('TCP_KEEPCNT:',NetKeepAlive.getKeepAliveProbes(socket));
+        debug('TCP_KEEPCNT:',NetKeepAlive.getKeepAliveProbes(socket));
         
       });
 
@@ -109,7 +98,7 @@ class DahuaCam extends events.EventEmitter {
    */
   ptzCommand(action,chnl,cmd,arg1,arg2,arg3,arg4) {
     var self = this;
-    this.logger.debug('ptzCommand: action: '+action+' chnl: '+chnl+' cmd: '+cmd+' arg1: '+arg1+' arg2: '+arg2+' arg3: '+arg3+' arg4: '+arg4);
+    debug('ptzCommand: action: '+action+' chnl: '+chnl+' cmd: '+cmd+' arg1: '+arg1+' arg2: '+arg2+' arg3: '+arg3+' arg4: '+arg4);
     
     actionAry = ["start","stop"]
     chnl = forceInt(chnl)
@@ -192,7 +181,7 @@ class DahuaCam extends events.EventEmitter {
     if (!isNaN(verticalSpeed) && isNaN(horizontalSpeed)) horizontalSpeed = verticalSpeed
     if (verticalSpeed > 0) speed = verticalSpeed;
 
-    if (TRACE) console.log('ptzMove: direction,action,verticalSpeed,horizontalSpeed ',direction,action,verticalSpeed,horizontalSpeed);
+    debug('ptzMove: direction,action,verticalSpeed,horizontalSpeed ',direction,action,verticalSpeed,horizontalSpeed);
     if (isNaN(verticalSpeed)) {
       self.emit("error",'INVALID PTZ VERTICAL SPEED');
       return 0;
@@ -305,20 +294,20 @@ class DahuaCam extends events.EventEmitter {
 
       // start search
       this.on('fileFinderCreated',function(objectId){
-        this.logger.debug('fileFinderId:',objectId);
+        debug('fileFinderId:',objectId);
         self.startFileFind(objectId,query.channel,query.startTime,query.endTime,query.types);
       });
 
       // fetch results
       this.on('startFileFindDone',function(objectId,body){
-        this.logger.debug('startFileFindDone:',objectId,body);   
+        debug('startFileFindDone:',objectId,body);   
         self.nextFileFind(objectId,query.count);
       });
 
       // handle the results 
       this.on('nextFileFindDone',function(objectId,items){
 
-        this.logger.debug('nextFileFindDone:',objectId);
+        debug('nextFileFindDone:',objectId);
         items.query = query;
         self.emit('filesFound',items);  
         self.closeFileFind(objectId);
@@ -327,12 +316,12 @@ class DahuaCam extends events.EventEmitter {
 
       // close and destroy the finder
       this.on('closeFileFindDone',function(objectId,body){
-        this.logger.debug('closeFileFindDone:',objectId,body);
+        debug('closeFileFindDone:',objectId,body);
         self.destroyFileFind(objectId);
       });
 
       this.on('destroyFileFindDone',function(objectId,body){
-        this.logger.debug('destroyFileFindDone:',objectId,body);
+        debug('destroyFileFindDone:',objectId,body);
       });
 
   };
@@ -403,10 +392,10 @@ class DahuaCam extends events.EventEmitter {
     
     request(url, function (error, response, body) {
       if ((error)) {
-        this.logger.error('startFileFind Error:',error);
-        self.emit("error", 'FAILED TO ISSUE FIND FILE COMMAND');
+        debug('startFileFind Error:',error);
+        self.emit("error", 'FAILED TO ISSUE FIND FILE COMMAND', error);
       } else {
-        this.logger.debug('startFileFind Response:',body.trim());
+        debug('startFileFind Response:',body.trim());
 
         // no results = http code 400 ? 
         //if(response.statusCode == 400 ) {
@@ -476,12 +465,10 @@ class DahuaCam extends events.EventEmitter {
 
     request(this.baseUri + '/cgi-bin/mediaFileFind.cgi?action=findNextFile&object=' + objectId + '&count=' + count, function (error, response, body) {
       if ((error) || (response.statusCode !== 200)) {
-        this.logger.error('nextFileFind Error:',error);
-        self.emit("error", 'FAILED NEXT FILE COMMAND');
+        debug('nextFileFind Error:',error);
+        self.emit("error", 'FAILED NEXT FILE COMMAND', error);
       }
       
-      // if (TRACE) console.log('nextFileFind Response:',body.trim());
-
       var items = {};
       var data = body.split('\r\n');
       
@@ -627,7 +614,7 @@ class DahuaCam extends events.EventEmitter {
     progress(request(this.baseUri + '/cgi-bin/RPC_Loadfile/' + file.FilePath))
     .auth(this.camUser,this.camPass,false)
     .on('progress', function (state) {
-      this.logger.info(`Downloaded ${Math.floor(state.percent * 100)} % @ ${Math.floor(state.speed / 1000)} KByte/s` );
+      debug(`Downloaded ${Math.floor(state.percent * 100)} % @ ${Math.floor(state.speed / 1000)} KByte/s` );
     })
     .on('response',function(response){
         if (response.statusCode !== 200) {
@@ -691,8 +678,8 @@ class DahuaCam extends events.EventEmitter {
     
     file.on('finish',()=> {
       if(deletefile) {
-        self.emit("getSnapshot", { 'status':"FAIL ECONNRESET or 0 byte recieved." });
-        this.logger.error(moment().format(),'FAIL ECONNRESET or 0 byte recieved. Deleting ',saveTo);
+        self.emit("getSnapshot", { 'status':"FAIL ECONNRESET or 0 byte received." });
+        debug(moment().format(),'FAIL ECONNRESET or 0 byte received. Deleting ',saveTo);
         fs.unlink(saveTo, (err) => {
           if (err) throw err;
         });
@@ -725,18 +712,13 @@ class DahuaCam extends events.EventEmitter {
       
       // empty?
       if(responseHeaders['content-length'] == 0 ) {
-        console.log(moment().format(),'NOT OK content-length 0');
+        debug(moment().format(),'NOT OK content-length 0');
         deletefile = true;
-        file.end();
-      
+        file.end();      
       } else {
-
-        // console.log(moment().format(),'OK content-length',responseBodyLength);
         deletefile = false;
         self.emit("getSnapshot", {'status':'DONE',});
-      
       }
-
     })
     .on('error',function(error){
       self.emit("error", 'ERROR ON SNAPSHOT - ' + error.code );
@@ -765,7 +747,7 @@ class DahuaCam extends events.EventEmitter {
 
 
   handleDahuaEventData(data) {
-    this.logger.debug('Data: ' + data.toString());
+    debug('Data: ' + data.toString());
     data = data.toString().split('\r\n');
     var i = Object.keys(data);
     i.forEach(id => {
@@ -780,17 +762,17 @@ class DahuaCam extends events.EventEmitter {
   }
 
   handleDahuaEventConnection(options) {
-    this.logger.debug('Connected to ' + options.host + ':' + options.port);
+    debug('Connected to ' + options.host + ':' + options.port);
     this.emit("connect");
   }
 
   handleDahuaEventEnd() {
-    this.logger.debug("Connection closed!");
+    debug("Connection closed!");
     this.emit("end");
   }
 
   handleDahuaEventError(err) {
-    this.logger.error("Connection error: " + err);
+    debug("Connection error: " + err);
     this.emit("error", err);
   }
 }
