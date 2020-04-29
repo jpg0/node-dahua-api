@@ -80,143 +80,6 @@ class DahuaCam extends events.EventEmitter {
       });
   };
 
-
-  /**
-   * These are the PTZ control commands. It is used to start or stop the PTZ control.
-   * URL syntax: http://<ip>/cgi-bin/ptz.cgi?action=[action]&channel=[ch]&code=[code]&arg1=[argstr]& arg2=[argstr]&arg3=[argstr]&arg4=[argstr]
-   * action is PTZ control command, it can be start or stop.
-   * ch is PTZ channel range is [0 - n-1], code is PTZ operation, and arg1, arg2, arg3, arg4 are the arguments of operation. 
-   * Code and argstr values are listed below in arrays.
-   * RESPONSE: OK or ERROR
-   * @param {*} action ['start','stop']
-   * @param {*} chnl   0 to n-1
-   * @param {*} cmd    Allowed commands are in the function: checkCmdValue(cmd)
-   * @param {*} arg1 
-   * @param {*} arg2 
-   * @param {*} arg3 
-   * @param {*} arg4 
-   */
-  ptzCommand(action,chnl,cmd,arg1,arg2,arg3,arg4) {
-    var self = this;
-    debug('ptzCommand: action: '+action+' chnl: '+chnl+' cmd: '+cmd+' arg1: '+arg1+' arg2: '+arg2+' arg3: '+arg3+' arg4: '+arg4);
-    
-    actionAry = ["start","stop"]
-    chnl = forceInt(chnl)
-    cmd = checkCmdValue(cmd); // verify the cmd passed in is a valid value
-    arg1 = forceInt(arg1);
-    arg2 = forceInt(arg2);
-    if (cmd != "SetPresetName") arg3 = forceInt(arg3); 
-    arg4 = forceInt(arg4);
-    
-    if (((actionAry.indexOf(action)) || chnl || cmd || arg1 || arg2 || arg3 || arg4) == -1) {
-      self.emit("error",'INVALID PTZ COMMAND');
-      return 0;
-    }
-    request(this.baseUri + '/cgi-bin/ptz.cgi?action=start&channel=0&code=' + cmd + '&arg1=' + arg1 + '&arg2=' + arg2 + '&arg3=' + arg3 + '&arg4=' + arg4, function (error, response, body) {
-      if ((error) || (response.statusCode !== 200) || (body.trim() !== "OK")) {
-        self.emit("error", 'FAILED TO ISSUE PTZ COMMAND');
-      }
-    }).auth(this.camUser,this.camPass,false);
-  };
-
-  ptzPreset(preset) {
-    var self = this;
-    if (isNaN(preset)) {
-      self.emit("error",'INVALID PTZ PRESET');
-      return 0;
-    }
-    preset = parseInt(preset)
-    request(this.baseUri + '/cgi-bin/ptz.cgi?action=start&channel=0&code=GotoPreset&arg1=0&arg2=' + preset + '&arg3=0', function (error, response, body) {
-      if ((error) || (response.statusCode !== 200) || (body.trim() !== "OK")) {
-        self.emit("error", 'FAILED TO ISSUE PTZ PRESET');
-      }
-    }).auth(this.camUser,this.camPass,false);
-  };
-
-  ptzZoom(action,arg2) {
-    var self = this;
-    // Check the action & arg2 values to ensure they are safe
-    if (['start','stop'].indexOf(action) == -1) {
-      action = stop;
-    }
-    if (isNaN(arg2)) {
-      self.emit("error",'INVALID PTZ ZOOM');
-      return 0;
-    } 
-    if (arg2 > 0) cmd = 'ZoomTele';
-    if (arg2 < 0) cmd = 'ZoomWide';
-    if (arg2 === 0) return 0;
-
-    request(this.baseUri + '/cgi-bin/ptz.cgi?action=' + action + '&channel=0&code=' + cmd + '&arg1=0&arg2=1&arg3=0', function (error, response, body) {
-      if ((error) || (response.statusCode !== 200) || (body.trim() !== "OK")) {
-        self.emit("error", 'FAILED TO ISSUE PTZ ZOOM');
-      }
-    }).auth(this.camUser,this.camPass,false);
-  };
-
-  /**
-   * These are the MOVE commands subset of the PTZ control commands. This starts or stops the PTZ control movement.
-   * URL syntax: http://<ip>/cgi-bin/ptz.cgi?action=[action]&channel=[ch]&code=[code]&arg1=[argstr]& arg2=[argstr]&arg3=[argstr]&arg4=[argstr]
-   * action is PTZ control command, it can be start or stop.
-   * ch is PTZ channel range is [0 - n-1], code is PTZ operation, and arg1, arg2, arg3, arg4 are the arguments of operation. 
-   * Code and argstr values are listed below in arrays.
-   * RESPONSE: OK or ERROR
-   * 
-   * NOTE: This function only contains the move actions. Other actions should be in the ptzCommand function.
-   * 
-   * @param {*} direction       "is code from the url" 
-   * @param {*} action          "['start','stop']"
-   * @param {*} verticalSpeed   "integer range: [1-8]"
-   * @param {*} horizontalSpeed "integer range: [1-8]"
-   */
-  ptzMove(direction,action,verticalSpeed,horizontalSpeed) {
-    var self = this;
-    // An array of allowed list of action values.
-    var actionAry = ['start','stop']
-    // This is the allowed list of movements. Some can be destructive. 
-    var directionAry = ["Up", "Down", "Left", "Right", "ZoomWide", "ZoomTele", "FocusNear", "FocusFar", "IrisLarge", "IrisSmall", "GotoPreset", "StartTour", "LeftUp", "RightUp", "LeftDown", "RightDown", "AutoPanOn", "AutoPanOff", "AutoScanOn", "AutoScanOff", "StartPattern", "StopPattern", "Position",  "PositionABS", "PositionReset", "UpTele", "DownTele", "LeftTele", "RightTele", "LeftUpTele", "LeftDownTele", "RightUpTele", "RightDownTele", "UpWide", "DownWide", "LeftWide", "RightWide", "LeftUpWide", "LeftDownWide", "RightUpWide", "RightDownWide", "Continuously", "Relatively"]
-    var verticalSpeed = parseInt(verticalSpeed);
-    var horizontalSpeed = parseInt(horizontalSpeed);
-    var speed = 4;
-    if (!isNaN(verticalSpeed) && isNaN(horizontalSpeed)) horizontalSpeed = verticalSpeed
-    if (verticalSpeed > 0) speed = verticalSpeed;
-
-    debug('ptzMove: direction,action,verticalSpeed,horizontalSpeed ',direction,action,verticalSpeed,horizontalSpeed);
-    if (isNaN(verticalSpeed)) {
-      self.emit("error",'INVALID PTZ VERTICAL SPEED');
-      return 0;
-    }
-    if (isNaN(horizontalSpeed)) {
-      self.emit("error",'INVALID PTZ HORIZONTAL SPEED');
-      return 0;
-    }
-    if (actionAry.indexOf(action) == -1) {
-      self.emit("error",'INVALID PTZ COMMAND');
-      return 0;
-    }
-    if (directionAry.indexOf(direction) == -1) {
-      self.emit("error",'INVALID PTZ DIRECTION');
-      return 0;
-    }
-    request(this.baseUri + '/cgi-bin/ptz.cgi?action=' + action + '&channel=0&code=' + direction + '&arg1=' + verticalSpeed +'&arg2=' + horizontalSpeed + '&arg3=0', function (error, response, body) {
-      if ((error) || (response.statusCode !== 200) || (body.trim() !== "OK")) {
-        self.emit("error", 'FAILED TO ISSUE PTZ UP COMMAND');
-      }
-    }).auth(this.camUser,this.camPass,false);
-  };
-
-  ptzStatus() {
-    var self = this;
-    request(this.baseUri + '/cgi-bin/ptz.cgi?action=getStatus', function (error, response, body) {
-      if ((!error) && (response.statusCode === 200)) {
-        body = body.toString().split('\r\n');
-        self.emit("ptzStatus", body);
-      } else {
-        self.emit("error", 'FAILED TO QUERY STATUS');
-      }
-    }).auth(this.camUser,this.camPass,false);
-  };
-
   // function to parse the getStatus() data
   parseStatusData(camConnection, statusData) {
     var params = {}, queries, temp, i, l;
@@ -643,9 +506,19 @@ class DahuaCam extends events.EventEmitter {
 
   /*=====  End of Load File  ======*/
 
+  getSnapshot(channel) {
+    return new Promise((resolve, reject) => {
+      let chunks = [];
+      request({'uri' : this.baseUri + '/cgi-bin/snapshot.cgi?' + channel})
+      .auth(this.camUser, this.camPass, false)
+      .on('data', chunk => chunks.push(chunk))
+      .on('end', () => resolve(Buffer.concat(chunks)))
+      .on('error', reject)
+    })
+  }
 
   /*====================================
-  =            Get Snapshot            =
+  =            Save Snapshot            =
   ====================================*/
 
   // API Description
@@ -659,7 +532,7 @@ class DahuaCam extends events.EventEmitter {
   // Comment
   // The channel number is default 0 if the request is not carried the param.
 
-  getSnapshot(options) {
+  saveSnapshot(options) {
     var self = this;
     var opts = {};
 
